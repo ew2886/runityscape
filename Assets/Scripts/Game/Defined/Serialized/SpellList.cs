@@ -12,6 +12,9 @@ using Scripts.Model.Pages;
 using Scripts.View.Effects;
 using Scripts.Game.Serialized.Brains;
 using UnityEngine;
+using Scripts.Presenter;
+using Scripts.Game.Defined.Characters;
+using Scripts.Game.Defined.Serialized.Buffs;
 
 namespace Scripts.Game.Defined.Serialized.Spells {
 
@@ -21,7 +24,7 @@ namespace Scripts.Game.Defined.Serialized.Spells {
         public const float HIT_STRENGTH_RATIO = 0.5f;
         public const float CRITICAL_STRENGTH_RATIO = 1f;
         public const float CRITICAL_VARIANCE = .125f;
-        public const float BASE_ACCURACY = .80f;
+        public const float BASE_ACCURACY = .90f;
         public const float BASE_CRITICAL_RATE = 0f;
         public const int SKILL_ON_HIT = 1;
         public const int SKILL_ON_CRIT = 2;
@@ -33,19 +36,19 @@ namespace Scripts.Game.Defined.Serialized.Spells {
             return string.Format("A basic attack with the weapons or fists.");
         }
 
-        protected override IList<IEnumerator> GetHitSFX(PortraitView caster, PortraitView target) {
-            return new IEnumerator[] { SFX.DoMeleeEffect(caster.Image.gameObject, target.Image.gameObject, 0.5f, "Slash_0") };
+        protected override IList<IEnumerator> GetHitSFX(Character caster, Character target) {
+            return new IEnumerator[] { SFX.DoMeleeEffect(caster, target, 0.5f, "Slash_0") };
         }
 
-        protected override bool IsHit(SpellParams caster, SpellParams target) {
+        protected override bool IsHit(Character caster, Character target) {
             return Util.IsChance(BASE_ACCURACY + StatUtil.GetDifference(StatType.AGILITY, caster.Stats, target.Stats) * PERCENT);
         }
 
-        protected override bool IsCritical(SpellParams caster, SpellParams target) {
+        protected override bool IsCritical(Character caster, Character target) {
             return Util.IsChance(BASE_CRITICAL_RATE + StatUtil.GetDifference(StatType.AGILITY, caster.Stats, target.Stats) * PERCENT);
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page page, Character caster, Character target) {
             int totalCasterStrength = caster.Stats.GetStatCount(Stats.Get.MOD_AND_EQUIP, StatType.STRENGTH);
             int damage = -Util.Random(Mathf.CeilToInt(totalCasterStrength * HIT_STRENGTH_RATIO), HIT_VARIANCE);
 
@@ -55,7 +58,7 @@ namespace Scripts.Game.Defined.Serialized.Spells {
                 };
         }
 
-        protected override IList<SpellEffect> GetCriticalEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetCriticalEffects(Page page, Character caster, Character target) {
             int totalCasterStrength = caster.Stats.GetStatCount(Stats.Get.MOD_AND_EQUIP, StatType.STRENGTH);
             int damage = -Util.Random(totalCasterStrength, CRITICAL_VARIANCE);
             return new SpellEffect[] {
@@ -66,6 +69,7 @@ namespace Scripts.Game.Defined.Serialized.Spells {
     }
 
     public class Wait : BasicSpellbook {
+
         public Wait() : base("Wait", Util.GetSprite("hourglass"), TargetType.SELF, SpellType.MERCY) {
             this.flags.Remove(Model.Spells.Flag.CASTER_REQUIRES_SPELL);
         }
@@ -74,7 +78,7 @@ namespace Scripts.Game.Defined.Serialized.Spells {
             return "Literally do nothing.";
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page page, Character caster, Character target) {
             return new SpellEffect[0];
         }
     }
@@ -82,20 +86,22 @@ namespace Scripts.Game.Defined.Serialized.Spells {
     public class Check : BasicSpellbook {
         private static readonly Checked DUMMY = new Checked();
 
-        public Check() : base("Check", Util.GetSprite("magnifying-glass"), TargetType.ANY, SpellType.BOOST) { }
+        public Check() : base("Check", Util.GetSprite("magnifying-glass"), TargetType.ANY, SpellType.BOOST) {
+            AddCost(StatType.MANA, 10);
+        }
 
         protected override string CreateDescriptionHelper() {
             return BuffAdder.CreateBuffDescription(DUMMY);
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page page, Character caster, Character target) {
             return new SpellEffect[] {
                 new PostText(CheckText(target)),
-                new AddBuff(new BuffParams(caster.Stats, caster.CharacterId), target.Buffs, new Checked())
+                new AddBuff(new BuffParams(caster.Stats, caster.Id), target.Buffs, new Checked())
             };
         }
 
-        private static string CheckText(SpellParams target) {
+        private static string CheckText(Character target) {
             return string.Format(
                 "{0}\n{1}",
                 target.Look.DisplayName,
@@ -105,12 +111,14 @@ namespace Scripts.Game.Defined.Serialized.Spells {
     }
 
     public class InflictPoison : BuffAdder {
+
         public InflictPoison() : base(TargetType.SINGLE_ENEMY, SpellType.OFFENSE, new Poison(), "Infect", PriorityType.NORMAL) {
             AddCost(StatType.MANA, 1);
         }
     }
 
     public class SetupCounter : BuffAdder {
+
         public SetupCounter() : base(TargetType.SELF, SpellType.DEFENSE, new Counter(), "Counter", PriorityType.LOW) {
             AddCost(StatType.SKILL, 3);
         }
@@ -119,41 +127,68 @@ namespace Scripts.Game.Defined.Serialized.Spells {
     public class Heal : BasicSpellbook {
         private const int HEALING_AMOUNT = 10;
 
-        public Heal() : base("Heal", Util.GetSprite("health-normal"), TargetType.SINGLE_ALLY, SpellType.BOOST, PriorityType.HIGH) { }
+        public Heal() : base("Heal", Util.GetSprite("health-normal"), TargetType.SINGLE_ALLY, SpellType.BOOST, PriorityType.HIGH) {
+        }
 
         protected override string CreateDescriptionHelper() {
             return "Restore a little health.";
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page page, Character caster, Character target) {
             return new SpellEffect[] {
                 new AddToModStat(target.Stats, StatType.HEALTH, HEALING_AMOUNT)
             };
         }
 
-        protected override IList<IEnumerator> GetHitSFX(PortraitView caster, PortraitView target) {
+        protected override IList<IEnumerator> GetHitSFX(Character caster, Character target) {
             return new IEnumerator[] { SFX.PlaySound("healspell1")
                 };
+        }
+    }
+
+    public class RevealTrueForm : BasicSpellbook {
+
+        public RevealTrueForm() : base("True Form", Util.GetSprite("paranoia"), TargetType.SELF, SpellType.BOOST) {
+        }
+
+        protected override string CreateDescriptionHelper() {
+            return "Reveal your true form.";
+        }
+
+        protected override IList<IEnumerator> GetHitSFX(Character caster, Character target) {
+            return new IEnumerator[] {
+                    SFX.DoSteamEffect(caster),
+                    SFX.PlaySound("Creepy"),
+                    SFX.PlaySound("i_see_you_voice"),
+                    SFX.LoopMusic("enchanted tiki 86")
+                };
+        }
+
+        protected override IList<SpellEffect> GetHitEffects(Page page, Character caster, Character target) {
+            return new SpellEffect[] {
+                new ChangeLookEffect(caster, FieldNPCs.ReplicantLook()),
+            };
         }
     }
 
     public class ReflectiveClone : BasicSpellbook {
         private const int NUMBER_OF_CLONES = 4;
 
-        public ReflectiveClone() : base("Harmless Illusions", Util.GetSprite("fox-head"), TargetType.SELF, SpellType.BOOST, PriorityType.LOW) { }
-
-        protected override string CreateDescriptionHelper() {
-            return "Creates clones of the caster that die when the caster is attacked. Clones reflect attacks and do no damage.";
+        public ReflectiveClone() : base("Hallucination", Util.GetSprite("fox-head"), TargetType.SELF, SpellType.BOOST, PriorityType.LOW) {
         }
 
-        protected override IList<IEnumerator> GetHitSFX(PortraitView caster, PortraitView target) {
+        protected override string CreateDescriptionHelper() {
+            return "Creates clones of the caster. Clones do no damage, and die when the caster is attacked. Clones reflect all damage taken.";
+        }
+
+        protected override IList<IEnumerator> GetHitSFX(Character caster, Character target) {
             return new IEnumerator[] {
                 SFX.Wait(HitsplatView.TOTAL_DURATION),
                 SFX.PlaySound("synthetic_explosion_1")
             };
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page current, Character caster, Character target) {
             Func<Character> cloneFunc =
                 () => {
                     Character c = new Character(
@@ -162,13 +197,13 @@ namespace Scripts.Game.Defined.Serialized.Spells {
                         new ReplicantClone());
                     c.AddFlag(Model.Characters.Flag.IS_CLONE);
                     c.Buffs.AddBuff(new ReflectAttack(), c);
-                    c.Buffs.AddBuff(new SpiritLink(), caster.Character);
+                    c.Buffs.AddBuff(new SpiritLink(), caster);
                     return c;
                 };
 
             return new SpellEffect[] {
-                new CloneEffect(NUMBER_OF_CLONES, caster.Page.GetSide(caster.Character), cloneFunc, caster.Page),
-                new ShuffleEffect(caster.Page, caster.Page.GetSide(caster.Character))
+                new CloneEffect(NUMBER_OF_CLONES, current.GetSide(caster), cloneFunc, current),
+                new ShuffleEffect(current, current.GetSide(caster))
             };
         }
     }
@@ -177,12 +212,27 @@ namespace Scripts.Game.Defined.Serialized.Spells {
         private static readonly BlackedOut DUMMY = new BlackedOut();
 
         public Blackout() : base(TargetType.SINGLE_ENEMY, SpellType.OFFENSE, DUMMY, "Blackout", PriorityType.HIGH) {
+        }
+    }
 
+    public class Ignite : BuffAdder {
+        private static readonly Ignited DUMMY = new Ignited();
+
+        public Ignite() : base(TargetType.SINGLE_ENEMY, SpellType.OFFENSE, DUMMY, "Ignite", PriorityType.NORMAL) {
+            AddCost(StatType.MANA, 10);
+        }
+
+        protected override IList<IEnumerator> GetHitSFX(Character caster, Character target) {
+            return new IEnumerator[] {
+                SFX.PlaySound("synthetic_explosion_1"),
+                SFX.DoSteamEffect(target, Color.red)
+            };
         }
     }
 }
 
 namespace Scripts.Game.Defined.Unserialized.Spells {
+
     public class Flee : BasicSpellbook {
         private Page destination;
         private Action stopBattle;
@@ -197,7 +247,7 @@ namespace Scripts.Game.Defined.Unserialized.Spells {
             return string.Format("Escape back to {0}.", destination.Location);
         }
 
-        protected override IList<SpellEffect> GetHitEffects(SpellParams caster, SpellParams target) {
+        protected override IList<SpellEffect> GetHitEffects(Page current, Character caster, Character target) {
             return new SpellEffect[] { new GoToPage(destination, stopBattle) };
         }
     }

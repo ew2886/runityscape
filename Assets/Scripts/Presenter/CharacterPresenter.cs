@@ -10,33 +10,11 @@ using UnityEngine;
 namespace Scripts.Presenter {
 
     /// <summary>
-    /// Details needed to add a hitsplat
-    /// </summary>
-    public struct SplatDetails {
-        public readonly Sprite Sprite;
-        public readonly Color Color;
-        public readonly string Text;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SplatDetails"/> struct.
-        /// </summary>
-        /// <param name="color">The color of the hitsplat.</param>
-        /// <param name="text">The text of the splat.</param>
-        /// <param name="sprite">The sprite of the plat.</param>
-        public SplatDetails(Color color, string text, Sprite sprite = null) {
-            this.Color = color;
-            this.Text = text;
-            this.Sprite = sprite;
-        }
-    }
-
-
-    /// <summary>
     /// Updates the portraitview from the character.
     /// </summary>
     public class CharacterPresenter {
-        public Character Character { get; private set; }
-        public PortraitView PortraitView { get; private set; }
+        private Character character;
+        private PortraitView portrait;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CharacterPresenter"/> class.
@@ -44,8 +22,12 @@ namespace Scripts.Presenter {
         /// <param name="character">The character associated with the portrait.</param>
         /// <param name="portraitView">The portrait associated with the character.</param>
         public CharacterPresenter(Character character, PortraitView portraitView) {
-            this.Character = character;
-            this.PortraitView = portraitView;
+            this.character = character;
+            this.portrait = portraitView;
+
+            while (this.character.Effects.Count > 0) {
+                ParentToEffects(character.Effects.Dequeue());
+            }
         }
 
         /// <summary>
@@ -55,13 +37,31 @@ namespace Scripts.Presenter {
             SetupFuncs();
         }
 
+        private RectTransform IconRect {
+            get {
+                if (portrait == null) {
+                    return null;
+                }
+                return portrait.Image.rectTransform;
+            }
+        }
+
+        private void ParentToEffects(GameObject go) {
+            if (portrait != null) {
+                Util.Parent(go, portrait.EffectsHolder);
+            }
+        }
+
         /// <summary>
         /// Setups functions in character.
         /// </summary>
         private void SetupFuncs() {
-            Character.Stats.AddSplat = (sd => AddHitsplat(sd));
-            Character.Buffs.AddSplat = (sd => AddHitsplat(sd));
-            Character.Equipment.AddSplat = (sd => AddHitsplat(sd));
+            character.GetIconRectFunc = () => IconRect;
+            character.ParentToEffectsFunc = (go) => ParentToEffects(go);
+
+            character.Stats.AddSplat = (sd => AddHitsplat(sd));
+            character.Buffs.AddSplat = (sd => AddHitsplat(sd));
+            character.Equipment.AddSplat = (sd => AddHitsplat(sd));
         }
 
         /// <summary>
@@ -69,8 +69,8 @@ namespace Scripts.Presenter {
         /// </summary>
         /// <param name="details">The details needed to customize the splat.</param>
         private void AddHitsplat(SplatDetails details) {
-            if (PortraitView != null && PortraitView.isActiveAndEnabled) {
-                PortraitView.StartCoroutine(SFX.DoHitSplat(PortraitView.EffectsHolder, details));
+            if (portrait != null && portrait.isActiveAndEnabled) {
+                portrait.StartCoroutine(SFX.DoHitSplat(character, details));
             }
         }
     }

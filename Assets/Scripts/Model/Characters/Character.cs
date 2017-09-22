@@ -1,11 +1,9 @@
 ﻿using Scripts.Game.Defined.Serialized.Brains;
+using Scripts.Game.Defined.SFXs;
 using Scripts.Model.Interfaces;
 using Scripts.Model.SaveLoad;
 using Scripts.Model.SaveLoad.SaveObjects;
-using Scripts.Model.Spells;
-using Scripts.Model.Stats;
 using Scripts.Model.TextBoxes;
-using Scripts.Presenter;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,7 +17,7 @@ namespace Scripts.Model.Characters {
     ///
     /// They can participate in battles.
     /// </summary>
-    public class Character : ISaveable<CharacterSave>, IIdNumberable, IAvatarable {
+    public class Character : ISaveable<CharacterSave>, IIdNumberable, IAvatarable, IPortraitable {
         public const int UNKNOWN_ID = -1;
 
         /// <summary>
@@ -35,7 +33,7 @@ namespace Scripts.Model.Characters {
         /// <summary>
         /// Character's appearance
         /// </summary>
-        public readonly Look Look;
+        public Look Look;
 
         /// <summary>
         /// Character's spells
@@ -58,9 +56,34 @@ namespace Scripts.Model.Characters {
         public readonly Equipment Equipment;
 
         /// <summary>
-        /// Presenter reference
+        /// The get icon position function
         /// </summary>
-        public CharacterPresenter Presenter;
+        public Func<RectTransform> GetIconRectFunc {
+            set {
+                getIconRectFunc = value;
+            }
+        }
+
+        private Func<RectTransform> getIconRectFunc;
+
+        /// <summary>
+        /// The parent to effects function
+        /// </summary>
+        public Action<GameObject> ParentToEffectsFunc {
+            set {
+                this.parentToEffectsFunc = value;
+            }
+        }
+
+        private Action<GameObject> parentToEffectsFunc;
+
+        public Func<bool> IsPortraitAvailableFunc {
+            set {
+                this.isPortraitAvailableFunc = value;
+            }
+        }
+
+        private Func<bool> isPortraitAvailableFunc;
 
         /// <summary>
         /// Character specific flags
@@ -76,6 +99,11 @@ namespace Scripts.Model.Characters {
         /// Unique id for this character.
         /// </summary>
         private int id;
+
+        /// <summary>
+        /// The effects queue. Save SFX until the portrait shows up.
+        /// </summary>
+        private Queue<GameObject> effectsQueue;
 
         /// <summary>
         /// Main constructor
@@ -104,6 +132,10 @@ namespace Scripts.Model.Characters {
             Stats.GetEquipmentBonus = f => Equipment.GetBonus(f);
             Buffs.Stats = Stats;
             this.id = idCounter++;
+
+            this.effectsQueue = new Queue<GameObject>();
+            this.parentToEffectsFunc = (go) => effectsQueue.Enqueue(go);
+            this.isPortraitAvailableFunc = () => false;
         }
 
         /// <summary>
@@ -138,6 +170,12 @@ namespace Scripts.Model.Characters {
             }
         }
 
+        public Queue<GameObject> Effects {
+            get {
+                return effectsQueue;
+            }
+        }
+
         public Sprite Sprite {
             get {
                 return Look.Sprite;
@@ -147,6 +185,18 @@ namespace Scripts.Model.Characters {
         public Color TextColor {
             get {
                 return Look.TextColor;
+            }
+        }
+
+        public RectTransform RectTransform {
+            get {
+                return getIconRectFunc();
+            }
+        }
+
+        public bool IsPortraitAvailable {
+            get {
+                return isPortraitAvailableFunc();
             }
         }
 
@@ -246,6 +296,10 @@ namespace Scripts.Model.Characters {
             this.Brain = brain;
 
             // Buffs and inventory must be setup in Party!
+        }
+
+        public void ParentToEffects(GameObject go) {
+            parentToEffectsFunc(go);
         }
     }
 }

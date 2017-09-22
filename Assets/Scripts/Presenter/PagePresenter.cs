@@ -41,6 +41,8 @@ namespace Scripts.Presenter {
 
         private InputBoxView inputBox;
 
+        private IDictionary<Character, CharacterPresenter> presenters;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="PagePresenter"/> class.
         /// </summary>
@@ -60,6 +62,7 @@ namespace Scripts.Presenter {
             this.sound = sound;
             this.characterPresenters = new List<CharacterPresenter>();
             InitializeFunctions();
+            this.presenters = new Dictionary<Character, CharacterPresenter>(new IdNumberEqualityComparer<Character>());
             this.Page = initial;
         }
 
@@ -93,7 +96,7 @@ namespace Scripts.Presenter {
                 SetPage(value);
             }
 
-            get {
+            private get {
                 return page;
             }
         }
@@ -132,8 +135,8 @@ namespace Scripts.Presenter {
             } else {
                 actionGrid.SetButtonAttributes(overrideGrid.List);
             }
-            SetCharacterPresenters(Page.Left, left);
-            SetCharacterPresenters(Page.Right, right);
+            SetCharacterPresenters(Page.Left.ToArray(), left);
+            SetCharacterPresenters(Page.Right.ToArray(), right);
         }
 
         /// <summary>
@@ -141,6 +144,8 @@ namespace Scripts.Presenter {
         /// </summary>
         /// <param name="page">The page.</param>
         private void SetPage(Page page) {
+            presenters.Clear();
+
             // Music decision
             if (string.IsNullOrEmpty(page.Music)) {
                 sound.StopAllSounds();
@@ -196,15 +201,19 @@ namespace Scripts.Presenter {
             return textBoxHolder.AddTextBox(t);
         }
 
-        private void SetCharacterPresenters(IEnumerable<Character> characters, PortraitHolderView portraitHolder) {
+        private void SetCharacterPresenters(IList<Character> characters, PortraitHolderView portraitHolder) {
             AddCharactersToPortraitHolder(characters, portraitHolder);
             foreach (Character c in characters) {
-                c.Presenter = new CharacterPresenter(c, portraitHolder.GetPortrait(c.Id));
-                c.Presenter.Tick();
+                CharacterPresenter presenter = new CharacterPresenter(c, portraitHolder.GetPortrait(c.Id));
+                presenter.Tick();
+                if (!presenters.ContainsKey(c)) {
+                    presenters.Add(c, null);
+                }
+                presenters[c] = presenter;
             }
         }
 
-        private void AddCharactersToPortraitHolder(IEnumerable<Character> characters, PortraitHolderView portraitHolder) {
+        private void AddCharactersToPortraitHolder(IList<Character> characters, PortraitHolderView portraitHolder) {
             int revealContributionFromFlags = Convert.ToInt32(characters.Any(c => c.Brain is Player)); // Being in same party as player gives +1 to revealing
             portraitHolder.AddContents(
                 characters
@@ -226,7 +235,7 @@ namespace Scripts.Presenter {
                                 duration: b.DurationText,
                                 name: b.Name,
                                 sprite: b.Sprite
-                            )),
+                            )).ToArray(),
                         resources: c
                             .Stats
                             .Resources
@@ -241,19 +250,15 @@ namespace Scripts.Presenter {
                                 sprite: r.Type.Sprite,
                                 typeDescription: r.Type.Description,
                                 title: r.Type.Name
-                            )),
+                            )).ToList(),
                         isRevealed: IsRevealedCalculation(c.Stats, revealContributionFromFlags)
                     )
-                )
+                ).ToArray()
             );
         }
 
         private bool IsRevealedCalculation(Stats stats, int contributionFromFlags) {
-            return (stats.ResourceVisibility + contributionFromFlags) > 0;
-        }
-
-        private void DoPageTransition() {
-            Main.Instance.Title.Play(0.25f);
+            return Util.IS_DEBUG || (stats.ResourceVisibility + contributionFromFlags) > 0;
         }
     }
 }
